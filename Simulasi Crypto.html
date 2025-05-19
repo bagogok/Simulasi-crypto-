@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Simulasi Crypto</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: white;
+      margin: 0;
+      padding: 0;
+    }
+
+    #creator-label {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 2000;
+      font-size: 1em;
+      font-weight: bold;
+      font-family: Arial, sans-serif;
+      color: yellow;
+    }
+
+    #loading-screen {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background-color: #0f172a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 2em;
+      animation: fadeIn 2s ease-in-out;
+      z-index: 1000;
+    }
+
+    @keyframes blink {
+      0% { opacity: 0.1; }
+      50% { opacity: 1; }
+      100% { opacity: 0.1; }
+    }
+
+    .blinking {
+      animation: blink 1s infinite;
+    }
+
+    .container {
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
+      display: none;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .section {
+      background: #1e293b;
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+
+    .price, .balance, .indicator {
+      font-size: 1.2em;
+      margin-bottom: 10px;
+    }
+
+    .indicator {
+      padding: 5px 10px;
+      border-radius: 20px;
+      font-weight: bold;
+      display: inline-block;
+    }
+
+    .up {
+      background-color: #22c55e;
+    }
+
+    .down {
+      background-color: #ef4444;
+    }
+
+    canvas {
+      background: #1e293b;
+      border-radius: 10px;
+      padding: 10px;
+      width: 100%;
+      max-height: 300px;
+    }
+
+    input, button {
+      width: 100%;
+      padding: 10px;
+      font-size: 1em;
+      border-radius: 8px;
+      border: none;
+      margin-top: 10px;
+    }
+
+    input {
+      background: #334155;
+      color: white;
+    }
+
+    button {
+      background: #38bdf8;
+      color: black;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:disabled {
+      background: gray;
+      cursor: not-allowed;
+    }
+
+    #sell-warning, #buy-warning {
+      color: #f87171;
+      font-size: 0.9em;
+      margin-top: 5px;
+    }
+
+    .history {
+      background: #1e293b;
+      padding: 15px;
+      border-radius: 10px;
+      font-size: 0.95em;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .history-entry {
+      border-bottom: 1px solid #334155;
+      padding: 5px 0;
+    }
+
+    @media (max-width: 480px) {
+      canvas {
+        max-height: 250px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="creator-label">Kreator: Suwawowo</div>
+
+  <div id="loading-screen" class="blinking">Simulasi Crypto</div>
+
+  <div class="container">
+    <h1>Simulasi Crypto</h1>
+
+    <div class="section">
+      <div class="price" id="btc-price">Harga BTC: $0</div>
+      <div id="indicator" class="indicator">-</div>
+    </div>
+
+    <div class="section">
+      <div class="balance" id="usd-balance">Saldo USD: $1000.00</div>
+      <div class="balance" id="btc-balance">Saldo BTC: 0.01</div>
+
+      <input type="text" id="sell-amount" placeholder="Contoh: 0.001 BTC" oninput="previewSell()" />
+      <div id="sell-estimate">Estimasi hasil: $0.00</div>
+      <div id="sell-warning"></div>
+      <button onclick="sellBTC()" id="sell-btn" disabled>Jual BTC</button>
+
+      <hr style="margin: 20px 0; border: 0.5px solid #334155" />
+
+      <input type="text" id="buy-amount" placeholder="Masukkan USD untuk beli BTC" oninput="previewBuy()" />
+      <div id="buy-estimate">Estimasi BTC: 0.0000</div>
+      <div id="buy-warning"></div>
+      <button onclick="buyBTC()" id="buy-btn" disabled>Beli BTC</button>
+    </div>
+
+    <canvas id="priceChart"></canvas>
+
+    <div class="section history">
+      <h3>Riwayat Transaksi</h3>
+      <div id="history-list"></div>
+    </div>
+  </div>
+
+  <script>
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    const labels = [];
+    const dataPoints = [];
+
+    let lastPrice = null;
+    let currentPrice = 30000;
+    let usdBalance = 1000.00;
+    let btcBalance = 0.01;
+    let goingUp = true;
+
+    const historyList = document.getElementById("history-list");
+
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Harga BTC (USD)',
+          data: dataPoints,
+          borderColor: '#38bdf8',
+          backgroundColor: 'rgba(56, 189, 248, 0.2)',
+          tension: 0.4,
+          fill: true,
+          pointRadius: 0,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+          duration: 800,
+          easing: 'easeOutQuad'
+        },
+        scales: {
+          x: { ticks: { color: "#fff" }},
+          y: { ticks: { color: "#fff" }, beginAtZero: false },
+        },
+        plugins: {
+          legend: { labels: { color: "#fff" }}
+        }
+      }
+    });
+
+    function updateUI() {
+      document.getElementById("btc-price").textContent = `Harga BTC: $${currentPrice.toLocaleString("id-ID")}`;
+      document.getElementById("usd-balance").textContent = `Saldo USD: $${usdBalance.toFixed(2)}`;
+      document.getElementById("btc-balance").textContent = `Saldo BTC: ${btcBalance.toFixed(4)}`;
+    }
+
+    function addHistory(text) {
+      const entry = document.createElement("div");
+      entry.className = "history-entry";
+      entry.textContent = `${new Date().toLocaleTimeString()} - ${text}`;
+      historyList.prepend(entry);
+    }
+
+    function previewSell() {
+      const input = document.getElementById("sell-amount");
+      const estimate = document.getElementById("sell-estimate");
+      const warning = document.getElementById("sell-warning");
+      const sellBtn = document.getElementById("sell-btn");
+
+      const amount = parseFloat(input.value.replace(",", "."));
+
+      if (!isNaN(amount) && amount > 0) {
+        const result = amount * currentPrice;
+        if (amount <= btcBalance) {
+          estimate.textContent = `Estimasi hasil: $${result.toFixed(2)}`;
+          warning.textContent = "";
+          sellBtn.disabled = false;
+        } else {
+          estimate.textContent = `Estimasi hasil: $0.00`;
+          warning.textContent = `Jumlah melebihi saldo BTC kamu!`;
+          sellBtn.disabled = true;
+        }
+      } else {
+        estimate.textContent = `Estimasi hasil: $0.00`;
+        warning.textContent = "";
+        sellBtn.disabled = true;
+      }
+    }
+
+    function sellBTC() {
+      const input = document.getElementById("sell-amount");
+      const amount = parseFloat(input.value.replace(",", "."));
+      if (!isNaN(amount) && amount > 0 && amount <= btcBalance) {
+        const result = amount * currentPrice;
+        btcBalance -= amount;
+        usdBalance += result;
+        addHistory(`Jual ${amount} BTC, Dapat $${result.toFixed(2)}`);
+        input.value = "";
+        previewSell();
+        updateUI();
+      }
+    }
+
+    function previewBuy() {
+      const input = document.getElementById("buy-amount");
+      const estimate = document.getElementById("buy-estimate");
+      const warning = document.getElementById("buy-warning");
+      const buyBtn = document.getElementById("buy-btn");
+
+      const amount = parseFloat(input.value.replace(",", "."));
+
+      if (!isNaN(amount) && amount > 0) {
+        if (amount <= usdBalance) {
+          const result = amount / currentPrice;
+          estimate.textContent = `Estimasi BTC: ${result.toFixed(4)}`;
+          warning.textContent = "";
+          buyBtn.disabled = false;
+        } else {
+          estimate.textContent = `Estimasi BTC: 0.0000`;
+          warning.textContent = `Saldo USD tidak cukup!`;
+          buyBtn.disabled = true;
+        }
+      } else {
+        estimate.textContent = `Estimasi BTC: 0.0000`;
+        warning.textContent = "";
+        buyBtn.disabled = true;
+      }
+    }
+
+    function buyBTC() {
+      const input = document.getElementById("buy-amount");
+      const amount = parseFloat(input.value.replace(",", "."));
+      if (!isNaN(amount) && amount > 0 && amount <= usdBalance) {
+        const btcGet = amount / currentPrice;
+        usdBalance -= amount;
+        btcBalance += btcGet;
+        addHistory(`Beli ${btcGet.toFixed(4)} BTC seharga $${amount.toFixed(2)}`);
+        input.value = "";
+        previewBuy();
+        updateUI();
+      }
+    }
+
+    function simulatePrice() {
+      let change = (Math.random() * 50) + 10;
+      if (!goingUp) change *= -1;
+      currentPrice = Math.max(1000, Math.round((currentPrice + change) * 100) / 100);
+      goingUp = !goingUp;
+
+      const now = new Date().toLocaleTimeString();
+      if (labels.length >= 20) {
+        labels.shift();
+        dataPoints.shift();
+      }
+
+      labels.push(now);
+      dataPoints.push(currentPrice);
+      chart.update();
+
+      const indicator = document.getElementById("indicator");
+      if (lastPrice !== null) {
+        if (currentPrice > lastPrice) {
+          indicator.textContent = "Naik ↑";
+          indicator.className = "indicator up";
+        } else if (currentPrice < lastPrice) {
+          indicator.textContent = "Turun ↓";
+          indicator.className = "indicator down";
+        } else {
+          indicator.textContent = "Stabil";
+          indicator.className = "indicator";
+        }
+      }
+      lastPrice = currentPrice;
+      updateUI();
+    }
+
+    setInterval(simulatePrice, 5000);
+
+    // Loading screen
+    setTimeout(() => {
+      document.getElementById("loading-screen").textContent = "Loading...";
+    }, 5000);
+
+    setTimeout(() => {
+      document.getElementById("loading-screen").style.display = "none";
+      document.querySelector(".container").style.display = "block";
+    }, 10000);
+
+    updateUI();
+  </script>
+</body>
+</html>
